@@ -6,7 +6,7 @@ credentials.json
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
 .Python
 build/
