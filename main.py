@@ -501,66 +501,66 @@ Dog Expense Tracker Bot 🐩"""
             return {}
     
     def update_entry(self, entry_id: str, updates: dict) -> bool:
-    """Update entry fields with enhanced debugging"""
-    try:
-        if not self.sheet:
-            logger.error("🔧 No sheet connection")
+        """Update entry fields with enhanced debugging"""
+        try:
+            if not self.sheet:
+                logger.error("🔧 No sheet connection")
+                return False
+            
+            records = self.sheet.get_all_values()
+            # Corrected field map - Description is column 5
+            field_map = {
+                'Date': 1, 'Category': 2, 'Amount': 3, 'Paid By': 4, 
+                'Description': 5, 'Mabel Share': 9, 'Sister Share': 10
+            }
+            
+            logger.info(f"🔧 Updating entry {entry_id} with: {updates}")
+            logger.info(f"🔧 Total records found: {len(records)}")
+            
+            # Debug: Show sheet structure
+            if len(records) > 0:
+                logger.info(f"🔧 Headers: {records[0]}")
+            
+            for i, row in enumerate(records):
+                if i > 0 and len(row) > 7:
+                    current_id = row[7] if len(row) > 7 else 'NO_ID'
+                    logger.info(f"🔧 Row {i+1}: ID = '{current_id}' (looking for '{entry_id}')")
+                    
+                    if current_id == entry_id:
+                        logger.info(f"🔧 ✅ Found entry at row {i+1}, updating fields...")
+                        
+                        for field, value in updates.items():
+                            if field in field_map:
+                                col_index = field_map[field]
+                                logger.info(f"🔧 Updating {field} (column {col_index}) to: '{value}'")
+                                
+                                try:
+                                    # Convert to string and update cell
+                                    self.sheet.update_cell(i + 1, col_index, str(value))
+                                    logger.info(f"🔧 ✅ Successfully updated {field}")
+                                except Exception as cell_error:
+                                    logger.error(f"🔧 ❌ Error updating cell {field}: {cell_error}")
+                                    return False
+                            else:
+                                logger.warning(f"🔧 ⚠️ Field '{field}' not in field_map")
+                        
+                        logger.info("🔧 ✅ Entry update completed successfully")
+                        return True
+            
+            logger.error(f"🔧 ❌ Entry {entry_id} not found for update")
+            # Show available IDs for debugging
+            available_ids = []
+            for i, row in enumerate(records):
+                if i > 0 and len(row) > 7:
+                    available_ids.append(row[7])
+            logger.info(f"🔧 Available IDs: {available_ids[:5]}...")  # Show first 5
             return False
-        
-        records = self.sheet.get_all_values()
-        # Corrected field map - Description is column 5
-        field_map = {
-            'Date': 1, 'Category': 2, 'Amount': 3, 'Paid By': 4, 
-            'Description': 5, 'Mabel Share': 9, 'Sister Share': 10
-        }
-        
-        logger.info(f"🔧 Updating entry {entry_id} with: {updates}")
-        logger.info(f"🔧 Total records found: {len(records)}")
-        
-        # Debug: Show sheet structure
-        if len(records) > 0:
-            logger.info(f"🔧 Headers: {records[0]}")
-        
-        for i, row in enumerate(records):
-            if i > 0 and len(row) > 7:
-                current_id = row[7] if len(row) > 7 else 'NO_ID'
-                logger.info(f"🔧 Row {i+1}: ID = '{current_id}' (looking for '{entry_id}')")
-                
-                if current_id == entry_id:
-                    logger.info(f"🔧 ✅ Found entry at row {i+1}, updating fields...")
-                    
-                    for field, value in updates.items():
-                        if field in field_map:
-                            col_index = field_map[field]
-                            logger.info(f"🔧 Updating {field} (column {col_index}) to: '{value}'")
-                            
-                            try:
-                                # Convert to string and update cell
-                                self.sheet.update_cell(i + 1, col_index, str(value))
-                                logger.info(f"🔧 ✅ Successfully updated {field}")
-                            except Exception as cell_error:
-                                logger.error(f"🔧 ❌ Error updating cell {field}: {cell_error}")
-                                return False
-                        else:
-                            logger.warning(f"🔧 ⚠️ Field '{field}' not in field_map")
-                    
-                    logger.info("🔧 ✅ Entry update completed successfully")
-                    return True
-        
-        logger.error(f"🔧 ❌ Entry {entry_id} not found for update")
-        # Show available IDs for debugging
-        available_ids = []
-        for i, row in enumerate(records):
-            if i > 0 and len(row) > 7:
-                available_ids.append(row[7])
-        logger.info(f"🔧 Available IDs: {available_ids[:5]}...")  # Show first 5
-        return False
-        
-    except Exception as e:
-        logger.error(f"🔧 ❌ Error updating entry: {e}")
-        import traceback
-        logger.error(f"🔧 Full traceback: {traceback.format_exc()}")
-        return False
+            
+        except Exception as e:
+            logger.error(f"🔧 ❌ Error updating entry: {e}")
+            import traceback
+            logger.error(f"🔧 Full traceback: {traceback.format_exc()}")
+            return False
     
     def delete_entry(self, entry_id: str) -> bool:
         """Delete entry"""
