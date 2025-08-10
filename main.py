@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Streamlined Dog Expense Tracker Bot - Railway Version with Debug Fixes
-====================================================================
-Complete production-ready version with edit description debugging
+Streamlined Dog Expense Tracker Bot - Railway Version
+===================================================
+Complete production-ready version optimized for Railway deployment
 """
 
 import os
@@ -501,65 +501,66 @@ Dog Expense Tracker Bot 🐩"""
             return {}
     
     def update_entry(self, entry_id: str, updates: dict) -> bool:
-        """Update entry fields with enhanced debugging"""
-        try:
-            if not self.sheet:
-                logger.error("🔧 No sheet connection")
-                return False
-            
-            records = self.sheet.get_all_values()
-            # Updated field map - Description is column 5 (index 4)
-            field_map = {
-                'Date': 1, 'Category': 2, 'Amount': 3, 'Paid By': 4, 
-                'Description': 5, 'Mabel Share': 9, 'Sister Share': 10
-            }
-            
-            logger.info(f"🔧 Updating entry {entry_id} with: {updates}")
-            logger.info(f"🔧 Total records found: {len(records)}")
-            
-            # Debug: Show first few rows structure
-            for i, row in enumerate(records[:3]):
-                logger.info(f"🔧 Row {i}: {row}")
-            
-            for i, row in enumerate(records):
-                if i > 0 and len(row) > 7:
-                    current_id = row[7] if len(row) > 7 else 'NO_ID'
-                    logger.info(f"🔧 Checking row {i+1}: ID = '{current_id}' (looking for '{entry_id}')")
+    """Update entry fields with enhanced debugging"""
+    try:
+        if not self.sheet:
+            logger.error("🔧 No sheet connection")
+            return False
+        
+        records = self.sheet.get_all_values()
+        # Corrected field map - Description is column 5
+        field_map = {
+            'Date': 1, 'Category': 2, 'Amount': 3, 'Paid By': 4, 
+            'Description': 5, 'Mabel Share': 9, 'Sister Share': 10
+        }
+        
+        logger.info(f"🔧 Updating entry {entry_id} with: {updates}")
+        logger.info(f"🔧 Total records found: {len(records)}")
+        
+        # Debug: Show sheet structure
+        if len(records) > 0:
+            logger.info(f"🔧 Headers: {records[0]}")
+        
+        for i, row in enumerate(records):
+            if i > 0 and len(row) > 7:
+                current_id = row[7] if len(row) > 7 else 'NO_ID'
+                logger.info(f"🔧 Row {i+1}: ID = '{current_id}' (looking for '{entry_id}')")
+                
+                if current_id == entry_id:
+                    logger.info(f"🔧 ✅ Found entry at row {i+1}, updating fields...")
                     
-                    if current_id == entry_id:
-                        logger.info(f"🔧 Found entry at row {i+1}, updating fields...")
-                        
-                        for field, value in updates.items():
-                            if field in field_map:
-                                col_index = field_map[field]
-                                logger.info(f"🔧 Updating {field} (column {col_index}) to: '{value}'")
-                                
-                                try:
-                                    # Use 1-based indexing for Google Sheets
-                                    self.sheet.update_cell(i + 1, col_index, str(value))
-                                    logger.info(f"🔧 Successfully updated {field}")
-                                except Exception as cell_error:
-                                    logger.error(f"🔧 Error updating cell: {cell_error}")
-                                    return False
-                            else:
-                                logger.warning(f"🔧 Field '{field}' not in field_map")
-                        
-                        logger.info("✅ Entry update completed")
-                        return True
-            
-            logger.error(f"🔧 Entry {entry_id} not found for update")
-            available_ids = []
-            for i, row in enumerate(records):
-                if i > 0 and len(row) > 7:
-                    available_ids.append(row[7])
-            logger.info(f"🔧 Available IDs: {available_ids}")
-            return False
-            
-        except Exception as e:
-            logger.error(f"🔧 Error updating entry: {e}")
-            import traceback
-            logger.error(f"🔧 Full traceback: {traceback.format_exc()}")
-            return False
+                    for field, value in updates.items():
+                        if field in field_map:
+                            col_index = field_map[field]
+                            logger.info(f"🔧 Updating {field} (column {col_index}) to: '{value}'")
+                            
+                            try:
+                                # Convert to string and update cell
+                                self.sheet.update_cell(i + 1, col_index, str(value))
+                                logger.info(f"🔧 ✅ Successfully updated {field}")
+                            except Exception as cell_error:
+                                logger.error(f"🔧 ❌ Error updating cell {field}: {cell_error}")
+                                return False
+                        else:
+                            logger.warning(f"🔧 ⚠️ Field '{field}' not in field_map")
+                    
+                    logger.info("🔧 ✅ Entry update completed successfully")
+                    return True
+        
+        logger.error(f"🔧 ❌ Entry {entry_id} not found for update")
+        # Show available IDs for debugging
+        available_ids = []
+        for i, row in enumerate(records):
+            if i > 0 and len(row) > 7:
+                available_ids.append(row[7])
+        logger.info(f"🔧 Available IDs: {available_ids[:5]}...")  # Show first 5
+        return False
+        
+    except Exception as e:
+        logger.error(f"🔧 ❌ Error updating entry: {e}")
+        import traceback
+        logger.error(f"🔧 Full traceback: {traceback.format_exc()}")
+        return False
     
     def delete_entry(self, entry_id: str) -> bool:
         """Delete entry"""
@@ -927,235 +928,7 @@ async def handle_split(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['other_person'] = other
         
         await query.edit_message_text(
-            f"💰 **Custom Split**\n\nTotal: ${amount:.2f}\nPaid by: {payer}\n\nHow much should {other_person} pay?",
-            parse_mode='Markdown'
-        )
-        
-        return EDIT_SPLIT
-
-async def handle_edit_custom_split_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle custom split input during edit"""
-    try:
-        other_amount = float(update.message.text.strip())
-        total_amount = context.user_data['new_amount']
-        
-        if other_amount < 0 or other_amount > total_amount:
-            raise ValueError()
-        
-        payer = context.user_data['new_payer']
-        other_person = context.user_data['edit_other_person']
-        payer_amount = total_amount - other_amount
-        
-        if payer == "Mabel":
-            mabel_share, sister_share = payer_amount, other_amount
-        else:
-            mabel_share, sister_share = other_amount, payer_amount
-        
-        updates = {
-            'Amount': total_amount,
-            'Paid By': payer,
-            'Mabel Share': mabel_share,
-            'Sister Share': sister_share
-        }
-        
-        success = tracker.update_entry(context.user_data['editing_id'], updates)
-        
-        if success:
-            await update.message.reply_text(
-                f"✅ **Amount Updated!**\n\n💰 ${total_amount:.2f}\n👤 {payer}\n💸 {payer}: ${payer_amount:.2f}, {other_person}: ${other_amount:.2f}\n\n💡 Summary will reflect the new amount.\n\nUse /menu to continue.",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text("❌ Error updating entry.")
-        
-    except ValueError:
-        await update.message.reply_text(f"❌ Invalid amount. Enter 0 to ${context.user_data['new_amount']:.2f}")
-        return EDIT_SPLIT
-    
-    context.user_data.clear()
-    return ConversationHandler.END
-
-# =============================================================================
-# CONVERSATION HANDLERS
-# =============================================================================
-
-def create_expense_handler():
-    """Create expense logging conversation handler"""
-    return ConversationHandler(
-        entry_points=[CallbackQueryHandler(start_expense_logging, pattern="^log_")],
-        states={
-            DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_date)],
-            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount)],
-            PAYER: [CallbackQueryHandler(handle_payer, pattern="^payer_")],
-            SPLIT: [
-                CallbackQueryHandler(handle_split, pattern="^split_"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_split)
-            ],
-            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_description)],
-        },
-        fallbacks=[
-            CommandHandler('menu', show_menu),
-            CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$")
-        ],
-        per_user=True
-    )
-
-def create_settlement_handler():
-    """Create settlement conversation handler"""
-    return ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_settlement_start, pattern="^settle_")],
-        states={
-            SETTLEMENT_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settlement_amount)],
-        },
-        fallbacks=[
-            CommandHandler('menu', show_menu),
-            CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$")
-        ],
-        per_user=True,
-        allow_reentry=True
-    )
-
-def create_edit_handler():
-    """Create edit conversation handler"""
-    return ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_edit_selection, pattern="^edit_[0-9]")],
-        states={
-            EDIT_CHOICE: [
-                CallbackQueryHandler(handle_edit_field_choice, pattern="^(edit_|delete_|new_payer_)")
-            ],
-            EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_value_input)],
-            EDIT_PAYER: [
-                CallbackQueryHandler(handle_edit_payer_selection, pattern="^(edit_amount_payer_|new_payer_)")
-            ],
-            EDIT_SPLIT: [
-                CallbackQueryHandler(handle_edit_split_selection, pattern="^edit_split_"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_custom_split_input)
-            ],
-        },
-        fallbacks=[
-            CommandHandler('menu', show_menu),
-            CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$")
-        ],
-        per_user=True,
-        allow_reentry=True
-    )
-
-# =============================================================================
-# HELP COMMAND
-# =============================================================================
-
-@check_auth
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show help"""
-    help_text = """🐕 **Dog Expense Tracker Help**
-
-**Categories:**
-• 🏥 Vet Visit - Regular checkups (with cost)
-• 💉 Vaccination - Tracking only (no cost)
-• 🩸 Blood Test - Tracking only (no cost)  
-• 🔬 Other Vet - X-rays, tests, etc. (with cost)
-• 🛒 Other Expense - Food, toys, grooming (with cost)
-
-**Features:**
-• 💰 Custom expense splitting
-• 💳 Settlement payment tracking
-• ✏️ Edit/delete entries
-• 📊 Spending summaries
-• 📅 Automatic health reminders
-
-**Health Reminders:**
-• 💉 Vaccinations: Annual reminders (12 months)
-• 🩸 Blood Tests: Semi-annual reminders (6 months)
-• 📧 Calendar invites sent to both users
-• 🔔 Reminders start 2 weeks before due date
-
-**Commands:**
-• /menu - Main menu
-• /help - This help
-
-**Tips:**
-• Use 'today' for current date
-• Settlement payments automatically update balances
-• Editing amounts requires updating payment info
-• Calendar invites sent automatically when logging vaccinations/blood tests"""
-
-    await update.message.reply_text(help_text, parse_mode='Markdown')
-
-# =============================================================================
-# ERROR HANDLER
-# =============================================================================
-
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    """Handle errors"""
-    logger.error(f"Error: {context.error}")
-    
-    try:
-        if update and hasattr(update, 'effective_user'):
-            user_id = update.effective_user.id
-            if user_id in AUTHORIZED_USERS:
-                if hasattr(update, 'message') and update.message:
-                    await update.message.reply_text("❌ An error occurred. Use /menu to restart.")
-                elif hasattr(update, 'callback_query') and update.callback_query:
-                    await update.callback_query.message.reply_text("❌ An error occurred. Use /menu to restart.")
-    except Exception as e:
-        logger.error(f"Error in error handler: {e}")
-
-# =============================================================================
-# MAIN FUNCTION - Railway Optimized
-# =============================================================================
-
-def main():
-    """Run the bot optimized for Railway"""
-    
-    logger.info("🚂 Starting Dog Expense Tracker Bot on Railway...")
-    
-    # Validate environment
-    if not BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN not found in environment variables!")
-        logger.error("💡 Add your Telegram bot token to Railway environment variables as 'BOT_TOKEN'")
-        return
-    
-    # Initialize tracker
-    global tracker
-    if not tracker.sheet:
-        logger.error("❌ Failed to connect to Google Sheets")
-        logger.error("💡 Check your GOOGLE_CREDENTIALS_JSON environment variable")
-        return
-    
-    logger.info("✅ Google Sheets connection successful")
-    
-    # Create application
-    app = Application.builder().token(BOT_TOKEN).build()
-    
-    # Add handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", show_menu))
-    app.add_handler(CommandHandler("help", help_command))
-    
-    # Conversation handlers - order matters!
-    app.add_handler(create_settlement_handler())
-    app.add_handler(create_expense_handler())
-    app.add_handler(create_edit_handler())
-    
-    # Button handlers
-    app.add_handler(CallbackQueryHandler(handle_menu_buttons, pattern="^(view_|edit_log|settle_)"))
-    app.add_handler(CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$"))
-    
-    # Error handler
-    app.add_error_handler(error_handler)
-    
-    logger.info("✅ Bot handlers configured successfully")
-    logger.info("🚀 Bot is now running on Railway!")
-    logger.info("🔗 Your bot will run 24/7 on Railway's infrastructure")
-    
-    try:
-        app.run_polling(allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        logger.error(f"❌ Bot crashed: {e}")
-        raise
-
-if __name__ == '__main__':
-    main()payer}\n\nHow much should {other} pay?",
+            f"💰 **Custom Split**\n\nTotal: ${amount:.2f}\nPaid by: {payer}\n\nHow much should {other} pay?",
             parse_mode='Markdown'
         )
         return SPLIT
@@ -1401,15 +1174,9 @@ async def handle_edit_field_choice(update: Update, context: ContextTypes.DEFAULT
     return EDIT_VALUE
 
 async def handle_edit_value_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle edit value input with enhanced debugging"""
+    """Handle edit value input"""
     field = context.user_data['editing_field']
     new_value = update.message.text.strip()
-    
-    logger.info(f"🔧 Editing field: {field}")
-    logger.info(f"🔧 New value: '{new_value}'")
-    logger.info(f"🔧 Entry ID: {context.user_data.get('editing_id', 'MISSING')}")
-    
-    reminder_text = ""
     
     if field == "date":
         if new_value.lower() == 'today':
@@ -1428,6 +1195,7 @@ async def handle_edit_value_input(update: Update, context: ContextTypes.DEFAULT_
         category = entry.get('Category', '')
         description = entry.get('Description', '')
         
+        reminder_text = ""
         if success and category in ["Vaccination", "Blood Test"]:
             try:
                 # Calculate new due date and send calendar invite
@@ -1461,16 +1229,11 @@ async def handle_edit_value_input(update: Update, context: ContextTypes.DEFAULT_
                 reminder_text = f"\n\n⚠️ Date updated but calendar invite could not be sent"
         
     elif field == "description":
-        logger.info(f"🔧 Processing description update...")
-        
         if not new_value:
-            logger.warning(f"🔧 Empty description provided")
             await update.message.reply_text("❌ Description cannot be empty.")
             return EDIT_VALUE
         
-        logger.info(f"🔧 Calling tracker.update_entry...")
         success = tracker.update_entry(context.user_data['editing_id'], {'Description': new_value})
-        logger.info(f"🔧 Update result: {success}")
         
     elif field == "amount":
         try:
@@ -1490,8 +1253,6 @@ async def handle_edit_value_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         return EDIT_PAYER
-    
-    logger.info(f"🔧 Final success status: {success}")
     
     if success:
         await update.message.reply_text(f"✅ **Updated!**\n\n{field.title()} changed to: {new_value}{reminder_text}\n\nUse /menu to continue.", parse_mode='Markdown')
@@ -1590,4 +1351,232 @@ async def handle_edit_split_selection(update: Update, context: ContextTypes.DEFA
         context.user_data['edit_other_person'] = other_person
         
         await query.edit_message_text(
-            f"💰 **Custom Split**\n\nTotal: ${amount:.2f}\nPaid by: {
+            f"💰 **Custom Split**\n\nTotal: ${amount:.2f}\nPaid by: {payer}\n\nHow much should {other_person} pay?",
+            parse_mode='Markdown'
+        )
+        
+        return EDIT_SPLIT
+
+async def handle_edit_custom_split_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle custom split input during edit"""
+    try:
+        other_amount = float(update.message.text.strip())
+        total_amount = context.user_data['new_amount']
+        
+        if other_amount < 0 or other_amount > total_amount:
+            raise ValueError()
+        
+        payer = context.user_data['new_payer']
+        other_person = context.user_data['edit_other_person']
+        payer_amount = total_amount - other_amount
+        
+        if payer == "Mabel":
+            mabel_share, sister_share = payer_amount, other_amount
+        else:
+            mabel_share, sister_share = other_amount, payer_amount
+        
+        updates = {
+            'Amount': total_amount,
+            'Paid By': payer,
+            'Mabel Share': mabel_share,
+            'Sister Share': sister_share
+        }
+        
+        success = tracker.update_entry(context.user_data['editing_id'], updates)
+        
+        if success:
+            await update.message.reply_text(
+                f"✅ **Amount Updated!**\n\n💰 ${total_amount:.2f}\n👤 {payer}\n💸 {payer}: ${payer_amount:.2f}, {other_person}: ${other_amount:.2f}\n\n💡 Summary will reflect the new amount.\n\nUse /menu to continue.",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text("❌ Error updating entry.")
+        
+    except ValueError:
+        await update.message.reply_text(f"❌ Invalid amount. Enter 0 to ${context.user_data['new_amount']:.2f}")
+        return EDIT_SPLIT
+    
+    context.user_data.clear()
+    return ConversationHandler.END
+
+# =============================================================================
+# CONVERSATION HANDLERS
+# =============================================================================
+
+def create_expense_handler():
+    """Create expense logging conversation handler"""
+    return ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_expense_logging, pattern="^log_")],
+        states={
+            DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_date)],
+            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount)],
+            PAYER: [CallbackQueryHandler(handle_payer, pattern="^payer_")],
+            SPLIT: [
+                CallbackQueryHandler(handle_split, pattern="^split_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_split)
+            ],
+            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_description)],
+        },
+        fallbacks=[
+            CommandHandler('menu', show_menu),
+            CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$")
+        ],
+        per_user=True
+    )
+
+def create_settlement_handler():
+    """Create settlement conversation handler"""
+    return ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_settlement_start, pattern="^settle_")],
+        states={
+            SETTLEMENT_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settlement_amount)],
+        },
+        fallbacks=[
+            CommandHandler('menu', show_menu),
+            CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$")
+        ],
+        per_user=True,
+        allow_reentry=True
+    )
+
+def create_edit_handler():
+    """Create edit conversation handler"""
+    return ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_edit_selection, pattern="^edit_[0-9]")],
+        states={
+            EDIT_CHOICE: [
+                CallbackQueryHandler(handle_edit_field_choice, pattern="^(edit_|delete_|new_payer_)")
+            ],
+            EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_value_input)],
+            EDIT_PAYER: [
+                CallbackQueryHandler(handle_edit_payer_selection, pattern="^(edit_amount_payer_|new_payer_)")
+            ],
+            EDIT_SPLIT: [
+                CallbackQueryHandler(handle_edit_split_selection, pattern="^edit_split_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_custom_split_input)
+            ],
+        },
+        fallbacks=[
+            CommandHandler('menu', show_menu),
+            CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$")
+        ],
+        per_user=True,
+        allow_reentry=True
+    )
+
+# =============================================================================
+# HELP COMMAND
+# =============================================================================
+
+@check_auth
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show help"""
+    help_text = """🐕 **Dog Expense Tracker Help**
+
+**Categories:**
+• 🏥 Vet Visit - Regular checkups (with cost)
+• 💉 Vaccination - Tracking only (no cost)
+• 🩸 Blood Test - Tracking only (no cost)  
+• 🔬 Other Vet - X-rays, tests, etc. (with cost)
+• 🛒 Other Expense - Food, toys, grooming (with cost)
+
+**Features:**
+• 💰 Custom expense splitting
+• 💳 Settlement payment tracking
+• ✏️ Edit/delete entries
+• 📊 Spending summaries
+• 📅 Automatic health reminders
+
+**Health Reminders:**
+• 💉 Vaccinations: Annual reminders (12 months)
+• 🩸 Blood Tests: Semi-annual reminders (6 months)
+• 📧 Calendar invites sent to both users
+• 🔔 Reminders start 2 weeks before due date
+
+**Commands:**
+• /menu - Main menu
+• /help - This help
+
+**Tips:**
+• Use 'today' for current date
+• Settlement payments automatically update balances
+• Editing amounts requires updating payment info
+• Calendar invites sent automatically when logging vaccinations/blood tests"""
+
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+# =============================================================================
+# ERROR HANDLER
+# =============================================================================
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """Handle errors"""
+    logger.error(f"Error: {context.error}")
+    
+    try:
+        if update and hasattr(update, 'effective_user'):
+            user_id = update.effective_user.id
+            if user_id in AUTHORIZED_USERS:
+                if hasattr(update, 'message') and update.message:
+                    await update.message.reply_text("❌ An error occurred. Use /menu to restart.")
+                elif hasattr(update, 'callback_query') and update.callback_query:
+                    await update.callback_query.message.reply_text("❌ An error occurred. Use /menu to restart.")
+    except Exception as e:
+        logger.error(f"Error in error handler: {e}")
+
+# =============================================================================
+# MAIN FUNCTION - Railway Optimized
+# =============================================================================
+
+def main():
+    """Run the bot optimized for Railway"""
+    
+    logger.info("🚂 Starting Dog Expense Tracker Bot on Railway...")
+    
+    # Validate environment
+    if not BOT_TOKEN:
+        logger.error("❌ BOT_TOKEN not found in environment variables!")
+        logger.error("💡 Add your Telegram bot token to Railway environment variables as 'BOT_TOKEN'")
+        return
+    
+    # Initialize tracker
+    global tracker
+    if not tracker.sheet:
+        logger.error("❌ Failed to connect to Google Sheets")
+        logger.error("💡 Check your GOOGLE_CREDENTIALS_JSON environment variable")
+        return
+    
+    logger.info("✅ Google Sheets connection successful")
+    
+    # Create application
+    app = Application.builder().token(BOT_TOKEN).build()
+    
+    # Add handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", show_menu))
+    app.add_handler(CommandHandler("help", help_command))
+    
+    # Conversation handlers - order matters!
+    app.add_handler(create_settlement_handler())
+    app.add_handler(create_expense_handler())
+    app.add_handler(create_edit_handler())
+    
+    # Button handlers
+    app.add_handler(CallbackQueryHandler(handle_menu_buttons, pattern="^(view_|edit_log|settle_)"))
+    app.add_handler(CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$"))
+    
+    # Error handler
+    app.add_error_handler(error_handler)
+    
+    logger.info("✅ Bot handlers configured successfully")
+    logger.info("🚀 Bot is now running on Railway!")
+    logger.info("🔗 Your bot will run 24/7 on Railway's infrastructure")
+    
+    try:
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"❌ Bot crashed: {e}")
+        raise
+
+if __name__ == '__main__':
+    main()
