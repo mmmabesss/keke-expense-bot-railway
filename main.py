@@ -773,21 +773,28 @@ async def show_edit_menu(query):
             entry_id = entry.get('ID', '')
             category = entry.get('Category', 'Unknown')
             amount = entry.get('Amount', 0)
+            date = entry.get('Date', '')
             
             # Debug logging
-            logger.info(f"Edit menu entry: ID='{entry_id}', Category='{category}', Amount='{amount}'")
+            logger.info(f"Edit menu entry: ID='{entry_id}', Category='{category}', Amount='{amount}', Date='{date}'")
             
             if not entry_id:
                 logger.warning(f"Entry missing ID: {entry}")
                 continue
             
+            # Create descriptive button text
             if amount == 0 and category != 'Settlement Payment':
-                button_text = f"{category} - Tracking"
+                button_text = f"{date} - {category} (Tracking)"
             elif category == 'Settlement Payment':
-                button_text = f"Settlement - {entry.get('Paid By', '')}"
+                button_text = f"{date} - Settlement - {entry.get('Paid By', '')}"
             else:
-                button_text = f"{category} - ${amount:.2f}"
+                button_text = f"{date} - {category} - ${amount:.2f}"
             
+            # Make sure button text isn't too long
+            if len(button_text) > 60:
+                button_text = button_text[:57] + "..."
+            
+            logger.info(f"Creating button: '{button_text}' with callback_data='edit_{entry_id}'")
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f"edit_{entry_id}")])
         
         if not keyboard:
@@ -1084,7 +1091,22 @@ async def handle_edit_selection(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     
-    entry_id = query.data.replace("edit_", "")
+    # Debug: Log the full callback data
+    logger.info(f"🔍 Full callback data received: '{query.data}'")
+    
+    # Check if this is actually an "edit_log" button press (which should go to show_edit_menu)
+    if query.data == "edit_log":
+        logger.info("🔍 This is edit_log button, redirecting to show_edit_menu")
+        await show_edit_menu(query)
+        return ConversationHandler.END
+    
+    # Extract entry ID from callback data
+    if not query.data.startswith("edit_"):
+        logger.error(f"🔍 Invalid callback data format: '{query.data}'")
+        await query.edit_message_text("❌ Invalid selection. Please try again from the main menu.", parse_mode='Markdown')
+        return ConversationHandler.END
+    
+    entry_id = query.data[5:]  # Remove "edit_" prefix
     logger.info(f"Edit selection: Looking for entry ID '{entry_id}'")
     
     entry = tracker.get_entry_by_id(entry_id)
@@ -1578,8 +1600,8 @@ def main():
     app.add_handler(create_expense_handler())
     app.add_handler(create_edit_handler())
     
-    # Button handlers
-    app.add_handler(CallbackQueryHandler(handle_menu_buttons, pattern="^(view_|edit_log|settle_)"))
+    # Button handlers - Fixed order and patterns
+    app.add_handler(CallbackQueryHandler(handle_menu_buttons, pattern="^(view_recent|view_summary|view_reminders|edit_log|settle_.*)$"))
     app.add_handler(CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$"))
     
     # Error handler
