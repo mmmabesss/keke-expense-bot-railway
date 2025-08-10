@@ -501,63 +501,71 @@ Dog Expense Tracker Bot 🐩"""
             return {}
     
     def update_entry(self, entry_id: str, updates: dict) -> bool:
-        """Update entry fields with enhanced debugging"""
+        """Update entry fields with enhanced debugging and error handling"""
         try:
             if not self.sheet:
                 logger.error("🔧 No sheet connection")
                 return False
             
-            records = self.sheet.get_all_values()
-            # Corrected field map - Description is column 5
-            field_map = {
-                'Date': 1, 'Category': 2, 'Amount': 3, 'Paid By': 4, 
-                'Description': 5, 'Mabel Share': 9, 'Sister Share': 10
-            }
+            # Get all records including headers
+            all_values = self.sheet.get_all_values()
+            if not all_values:
+                logger.error("🔧 No data found in sheet")
+                return False
             
+            headers = all_values[0]
+            logger.info(f"🔧 Sheet headers: {headers}")
+            
+            # Create field map based on actual headers (0-indexed for list, but 1-indexed for update_cell)
+            field_map = {}
+            for i, header in enumerate(headers):
+                field_map[header] = i + 1  # +1 because update_cell uses 1-indexed columns
+            
+            logger.info(f"🔧 Field map: {field_map}")
             logger.info(f"🔧 Updating entry {entry_id} with: {updates}")
-            logger.info(f"🔧 Total records found: {len(records)}")
             
-            # Debug: Show sheet structure
-            if len(records) > 0:
-                logger.info(f"🔧 Headers: {records[0]}")
-            
-            for i, row in enumerate(records):
-                if i > 0 and len(row) > 7:
-                    current_id = row[7] if len(row) > 7 else 'NO_ID'
-                    logger.info(f"🔧 Row {i+1}: ID = '{current_id}' (looking for '{entry_id}')")
-                    
+            # Find the row with matching ID
+            target_row = None
+            for i, row in enumerate(all_values[1:], start=2):  # Start from row 2 (skip header)
+                if len(row) > 7:  # Make sure row has enough columns
+                    current_id = row[7] if len(row) > 7 else ''  # ID is in column 8 (index 7)
                     if current_id == entry_id:
-                        logger.info(f"🔧 ✅ Found entry at row {i+1}, updating fields...")
-                        
-                        for field, value in updates.items():
-                            if field in field_map:
-                                col_index = field_map[field]
-                                logger.info(f"🔧 Updating {field} (column {col_index}) to: '{value}'")
-                                
-                                try:
-                                    # Convert to string and update cell
-                                    self.sheet.update_cell(i + 1, col_index, str(value))
-                                    logger.info(f"🔧 ✅ Successfully updated {field}")
-                                except Exception as cell_error:
-                                    logger.error(f"🔧 ❌ Error updating cell {field}: {cell_error}")
-                                    return False
-                            else:
-                                logger.warning(f"🔧 ⚠️ Field '{field}' not in field_map")
-                        
-                        logger.info("🔧 ✅ Entry update completed successfully")
-                        return True
+                        target_row = i
+                        logger.info(f"🔧 ✅ Found entry at row {i}")
+                        break
             
-            logger.error(f"🔧 ❌ Entry {entry_id} not found for update")
-            # Show available IDs for debugging
-            available_ids = []
-            for i, row in enumerate(records):
-                if i > 0 and len(row) > 7:
-                    available_ids.append(row[7])
-            logger.info(f"🔧 Available IDs: {available_ids[:5]}...")  # Show first 5
-            return False
+            if not target_row:
+                logger.error(f"🔧 ❌ Entry {entry_id} not found")
+                # Debug: show available IDs
+                available_ids = []
+                for row in all_values[1:]:
+                    if len(row) > 7:
+                        available_ids.append(row[7])
+                logger.info(f"🔧 Available IDs: {available_ids[:10]}")
+                return False
+            
+            # Update each field
+            for field, value in updates.items():
+                if field in field_map:
+                    col_index = field_map[field]
+                    logger.info(f"🔧 Updating {field} in column {col_index} to: '{value}'")
+                    
+                    try:
+                        # Update the cell - using 1-indexed row and column
+                        self.sheet.update_cell(target_row, col_index, str(value))
+                        logger.info(f"🔧 ✅ Successfully updated {field}")
+                    except Exception as cell_error:
+                        logger.error(f"🔧 ❌ Error updating {field}: {cell_error}")
+                        return False
+                else:
+                    logger.warning(f"🔧 ⚠️ Field '{field}' not found in headers")
+                    logger.info(f"🔧 Available fields: {list(field_map.keys())}")
+            
+            logger.info("🔧 ✅ Entry update completed successfully")
+            return True
             
         except Exception as e:
-            logger.error(f"🔧 ❌ Error updating entry: {e}")
+            logger.error(f"🔧 ❌ Error in update_entry: {e}")
             import traceback
             logger.error(f"🔧 Full traceback: {traceback.format_exc()}")
             return False
@@ -1178,86 +1186,95 @@ async def handle_edit_value_input(update: Update, context: ContextTypes.DEFAULT_
     field = context.user_data['editing_field']
     new_value = update.message.text.strip()
     
-    if field == "date":
-        if new_value.lower() == 'today':
-            new_value = datetime.now().strftime('%Y-%m-%d')
-        else:
-            try:
-                datetime.strptime(new_value, '%Y-%m-%d')
-            except ValueError:
-                await update.message.reply_text("❌ Invalid date format.")
-                return EDIT_VALUE
-        
-        success = tracker.update_entry(context.user_data['editing_id'], {'Date': new_value})
-        
-        # Check if this is a vaccination or blood test - if so, send new calendar invite
-        entry = context.user_data.get('editing_entry', {})
-        category = entry.get('Category', '')
-        description = entry.get('Description', '')
-        
-        reminder_text = ""
-        if success and category in ["Vaccination", "Blood Test"]:
-            try:
-                # Calculate new due date and send calendar invite
-                current_datetime = datetime.strptime(new_value, '%Y-%m-%d')
-                
-                if category == "Vaccination":
-                    next_due = current_datetime + timedelta(days=365)
-                    event_description = f"Annual vaccination appointment. Last vaccination: {new_value}. Notes: {description}"
-                elif category == "Blood Test":
-                    next_due = current_datetime + timedelta(days=183)
-                    event_description = f"Semi-annual blood test appointment. Last blood test: {new_value}. Notes: {description}"
-                
-                # Send new calendar email
-                email_success = tracker.send_calendar_email(
-                    event_type=category.lower().replace(' ', '_'),
-                    current_date=new_value,
-                    next_due_date=next_due.strftime('%Y-%m-%d'),
-                    description=event_description
-                )
-                
-                if email_success:
-                    next_due_formatted = next_due.strftime('%Y-%m-%d')
-                    reminder_text = f"\n\n📅 **Updated next {category.lower()} appointment:** {next_due_formatted}\n📧 **New calendar invite emailed!** Check your email for the updated .ics file."
-                    logger.info(f"✅ Updated calendar appointment for {category} on {next_due_formatted}")
-                else:
-                    reminder_text = f"\n\n⚠️ Date updated but calendar invite could not be sent (check email configuration)"
-                    logger.warning(f"⚠️ Failed to send updated {category} calendar appointment")
-                    
-            except Exception as e:
-                logger.error(f"Error sending updated calendar appointment: {e}")
-                reminder_text = f"\n\n⚠️ Date updated but calendar invite could not be sent"
-        
-    elif field == "description":
-        if not new_value:
-            await update.message.reply_text("❌ Description cannot be empty.")
-            return EDIT_VALUE
-        
-        success = tracker.update_entry(context.user_data['editing_id'], {'Description': new_value})
-        
-    elif field == "amount":
-        try:
-            amount = float(new_value)
-            if amount < 0:
-                raise ValueError()
-        except ValueError:
-            await update.message.reply_text("❌ Invalid amount.")
-            return EDIT_VALUE
-        
-        context.user_data['new_amount'] = amount
-        
-        keyboard = [[InlineKeyboardButton(name, callback_data=f"edit_amount_payer_{name}")] for name in AUTHORIZED_USERS.values()]
-        await update.message.reply_text(
-            f"💰 **Amount: ${amount:.2f}**\n\n👤 Who paid this amount?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        return EDIT_PAYER
+    reminder_text = ""
     
-    if success:
-        await update.message.reply_text(f"✅ **Updated!**\n\n{field.title()} changed to: {new_value}{reminder_text}\n\nUse /menu to continue.", parse_mode='Markdown')
-    else:
-        await update.message.reply_text("❌ Error updating entry.")
+    try:
+        if field == "date":
+            if new_value.lower() == 'today':
+                new_value = datetime.now().strftime('%Y-%m-%d')
+            else:
+                try:
+                    datetime.strptime(new_value, '%Y-%m-%d')
+                except ValueError:
+                    await update.message.reply_text("❌ Invalid date format. Use YYYY-MM-DD or 'today'")
+                    return EDIT_VALUE
+            
+            success = tracker.update_entry(context.user_data['editing_id'], {'Date': new_value})
+            
+            # Check if this is a vaccination or blood test - if so, send new calendar invite
+            entry = context.user_data.get('editing_entry', {})
+            category = entry.get('Category', '')
+            description = entry.get('Description', '')
+            
+            if success and category in ["Vaccination", "Blood Test"]:
+                try:
+                    # Calculate new due date and send calendar invite
+                    current_datetime = datetime.strptime(new_value, '%Y-%m-%d')
+                    
+                    if category == "Vaccination":
+                        next_due = current_datetime + timedelta(days=365)
+                        event_description = f"Annual vaccination appointment. Last vaccination: {new_value}. Notes: {description}"
+                    elif category == "Blood Test":
+                        next_due = current_datetime + timedelta(days=183)
+                        event_description = f"Semi-annual blood test appointment. Last blood test: {new_value}. Notes: {description}"
+                    
+                    # Send new calendar email
+                    email_success = tracker.send_calendar_email(
+                        event_type=category.lower().replace(' ', '_'),
+                        current_date=new_value,
+                        next_due_date=next_due.strftime('%Y-%m-%d'),
+                        description=event_description
+                    )
+                    
+                    if email_success:
+                        next_due_formatted = next_due.strftime('%Y-%m-%d')
+                        reminder_text = f"\n\n📅 **Updated next {category.lower()} appointment:** {next_due_formatted}\n📧 **New calendar invite emailed!** Check your email for the updated .ics file."
+                        logger.info(f"✅ Updated calendar appointment for {category} on {next_due_formatted}")
+                    else:
+                        reminder_text = f"\n\n⚠️ Date updated but calendar invite could not be sent (check email configuration)"
+                        logger.warning(f"⚠️ Failed to send updated {category} calendar appointment")
+                        
+                except Exception as e:
+                    logger.error(f"Error sending updated calendar appointment: {e}")
+                    reminder_text = f"\n\n⚠️ Date updated but calendar invite could not be sent"
+            
+        elif field == "description":
+            if not new_value:
+                await update.message.reply_text("❌ Description cannot be empty.")
+                return EDIT_VALUE
+            
+            success = tracker.update_entry(context.user_data['editing_id'], {'Description': new_value})
+            
+        elif field == "amount":
+            try:
+                amount = float(new_value)
+                if amount < 0:
+                    raise ValueError()
+            except ValueError:
+                await update.message.reply_text("❌ Invalid amount. Enter a positive number.")
+                return EDIT_VALUE
+            
+            context.user_data['new_amount'] = amount
+            
+            keyboard = [[InlineKeyboardButton(name, callback_data=f"edit_amount_payer_{name}")] for name in AUTHORIZED_USERS.values()]
+            await update.message.reply_text(
+                f"💰 **Amount: ${amount:.2f}**\n\n👤 Who paid this amount?",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+            return EDIT_PAYER
+        
+        if success:
+            await update.message.reply_text(
+                f"✅ **Updated!**\n\n{field.title()} changed to: {new_value}{reminder_text}\n\nUse /menu to continue.", 
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text("❌ Error updating entry. Please try again or contact support.")
+        
+    except Exception as e:
+        logger.error(f"Error in handle_edit_value_input: {e}")
+        await update.message.reply_text("❌ An unexpected error occurred. Please try again.")
     
     context.user_data.clear()
     return ConversationHandler.END
@@ -1442,7 +1459,7 @@ def create_settlement_handler():
 def create_edit_handler():
     """Create edit conversation handler"""
     return ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_edit_selection, pattern="^edit_[0-9]")],
+        entry_points=[CallbackQueryHandler(handle_edit_selection, pattern="^edit_.+")],
         states={
             EDIT_CHOICE: [
                 CallbackQueryHandler(handle_edit_field_choice, pattern="^(edit_|delete_|new_payer_)")
