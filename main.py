@@ -1481,7 +1481,7 @@ def create_settlement_handler():
 def create_edit_handler():
     """Create edit conversation handler"""
     return ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_edit_selection, pattern="^edit_.+")],
+        entry_points=[CallbackQueryHandler(handle_edit_selection, pattern="^edit_20\\d{6}_\\d{6}_\\d+")],
         states={
             EDIT_CHOICE: [
                 CallbackQueryHandler(handle_edit_field_choice, pattern="^(edit_|delete_|new_payer_)")
@@ -1600,8 +1600,9 @@ def main():
     app.add_handler(create_expense_handler())
     app.add_handler(create_edit_handler())
     
-    # Button handlers - Fixed order and patterns
-    app.add_handler(CallbackQueryHandler(handle_menu_buttons, pattern="^(view_recent|view_summary|view_reminders|edit_log|settle_.*)$"))
+    # Button handlers - Fixed order and patterns to avoid conflicts
+    app.add_handler(CallbackQueryHandler(handle_menu_buttons, pattern="^(view_recent|view_summary|view_reminders|edit_log)$"))
+    app.add_handler(CallbackQueryHandler(handle_menu_buttons, pattern="^settle_(jade_mabel|mabel_jade)$"))
     app.add_handler(CallbackQueryHandler(handle_back_to_menu, pattern="^back_to_menu$"))
     
     # Error handler
